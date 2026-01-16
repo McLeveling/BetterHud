@@ -11,10 +11,10 @@ import kr.toxicity.hud.bootstrap.bukkit.compatibility.Compatibility
 import kr.toxicity.hud.bootstrap.bukkit.compatibility.cooldown
 import kr.toxicity.hud.bootstrap.bukkit.util.bukkitPlayer
 import kr.toxicity.hud.util.ifNull
-import net.Indyuce.mmocore.MMOCore
-import net.Indyuce.mmocore.api.player.PlayerData
-import net.Indyuce.mmocore.api.player.stats.PlayerStats
-import net.Indyuce.mmocore.skill.RegisteredSkill
+import com.mcleveling.rpg.MCLRPG
+import com.mcleveling.rpg.player.RPGProfile
+import com.mcleveling.rpg.player.stats.PlayerStats
+import com.mcleveling.rpg.skills.types.RegisteredSkill
 import org.bukkit.entity.Player
 import java.util.function.Function
 
@@ -22,15 +22,15 @@ class MMOCoreCompatibility : Compatibility {
 
     override val website: String = "https://www.spigotmc.org/resources/70575/"
 
-    private fun Player.toMMOCore(): PlayerData? {
-        return MMOCore.plugin.playerDataManager.getOrNull(uniqueId)
+    private fun Player.toMMOCore(): RPGProfile? {
+        return RPGProfile.get(uniqueId)
     }
 
-    private fun PlayerData.modifier(skill: RegisteredSkill, key: String) = getSkillLevel(skill).let { level ->
+    private fun RPGProfile.modifier(skill: RegisteredSkill, key: String) = getSkillLevel(skill).let { level ->
         profess.getSkill(skill.handler.id)?.getParameter(key, level, this) ?: skill.getParameterInfo(key).evaluate(level, this)
     }
-    
-    private fun skill(name: String) = MMOCore.plugin.skillManager.getSkill(name) ?: throw RuntimeException("Unable to find that skill: $name")
+
+    private fun skill(name: String) = MCLRPG.getInstance().skillManager.getSkill(name) ?: throw RuntimeException("Unable to find that skill: $name")
 
     override val triggers: Map<String, (YamlObject) -> HudTrigger<*>>
         get() = mapOf()
@@ -40,7 +40,7 @@ class MMOCoreCompatibility : Compatibility {
             "mana" to { _ ->
                 HudListener { p ->
                     val mmo = p.bukkitPlayer.toMMOCore() ?: return@HudListener 0.0
-                    mmo.mana / mmo.stats.getStat("MAX_MANA")
+                    mmo.mana / mmo.playerStats.getStat("MAX_MANA")
                 }.run {
                     { this }
                 }
@@ -48,15 +48,7 @@ class MMOCoreCompatibility : Compatibility {
             "stamina" to { _ ->
                 HudListener { p ->
                     val mmo = p.bukkitPlayer.toMMOCore() ?: return@HudListener 0.0
-                    mmo.stamina / mmo.stats.getStat("MAX_STAMINA")
-                }.run {
-                    { this }
-                }
-            },
-            "stellium" to { _ ->
-                HudListener { p ->
-                    val mmo = p.bukkitPlayer.toMMOCore() ?: return@HudListener 0.0
-                    mmo.stellium / mmo.stats.getStat("MAX_STELLIUM") * 100
+                    mmo.stamina / mmo.playerStats.getStat("MAX_STAMINA")
                 }.run {
                     { this }
                 }
@@ -74,7 +66,7 @@ class MMOCoreCompatibility : Compatibility {
                 HudListener { p ->
                     val mmo = p.bukkitPlayer.toMMOCore() ?: return@HudListener 0.0
                     mmo.getBoundSkill(slot)?.let {
-                        (mmo.cooldown(it) / mmo.modifier(it.skill, "cooldown")).coerceAtLeast(0.0)
+                        (mmo.cooldown(it) / mmo.modifier(it.registeredSkill, "cooldown")).coerceAtLeast(0.0)
                     } ?: 0.0
                 }.run {
                     { this }
@@ -82,7 +74,7 @@ class MMOCoreCompatibility : Compatibility {
             },
             "cooldown_skill" to { c ->
                 val name = c["skill"]?.asString().ifNull { "skill value not set." }
-                val skill = MMOCore.plugin.skillManager.getSkill(name).ifNull { "the skill named \"$name\" doesn't exist." }
+                val skill = MCLRPG.getInstance().skillManager.getSkill(name).ifNull { "the skill named \"$name\" doesn't exist." }
                 HudListener { p ->
                     val mmo = p.bukkitPlayer.toMMOCore() ?: return@HudListener 0.0
                     (mmo.cooldown(skill) / mmo.modifier(skill, "cooldown")).coerceAtLeast(0.0)
@@ -100,13 +92,13 @@ class MMOCoreCompatibility : Compatibility {
             },
             "max_mana" to HudPlaceholder.of { _, _ ->
                 Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).stats.getStat("MAX_MANA")
+                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).playerStats.getStat("MAX_MANA")
                 }
             },
             "mana_percentage" to HudPlaceholder.of { _, _ ->
                 Function { p ->
                     (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).let {
-                        it.mana / it.stats.getStat("MAX_MANA") * 100
+                        it.mana / it.playerStats.getStat("MAX_MANA") * 100
                     }
                 }
             },
@@ -117,41 +109,19 @@ class MMOCoreCompatibility : Compatibility {
             },
             "max_stamina" to HudPlaceholder.of { _, _ ->
                 Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).stats.getStat("MAX_STAMINA")
+                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).playerStats.getStat("MAX_STAMINA")
                 }
             },
             "stamina_percentage" to HudPlaceholder.of { _, _ ->
                 Function { p ->
                     (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).let {
-                        it.stamina / it.stats.getStat("MAX_STAMINA") * 100
-                    }
-                }
-            },
-            "stellium" to HudPlaceholder.of { _, _ ->
-                Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).stellium
-                }
-            },
-            "max_stellium" to HudPlaceholder.of { _, _ ->
-                Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).stats.getStat("MAX_STELLIUM")
-                }
-            },
-            "stellium_percentage" to HudPlaceholder.of { _, _ ->
-                Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).let {
-                        it.stellium / it.stats.getStat("MAX_STELLIUM") * 100
+                        it.stamina / it.playerStats.getStat("MAX_STAMINA") * 100
                     }
                 }
             },
             "party_member_count" to HudPlaceholder.of { _, _ ->
                 Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).party?.countMembers() ?: 0
-                }
-            },
-            "guild_member_count" to HudPlaceholder.of { _, _ ->
-                Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).guild?.countMembers() ?: 0
+                    (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).party?.members?.size ?: 0
                 }
             },
             "exp" to HudPlaceholder.of { _, _ ->
@@ -184,7 +154,7 @@ class MMOCoreCompatibility : Compatibility {
                         }
                     }
                     Function { p ->
-                        getter((p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).stats)
+                        getter((p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).playerStats)
                     }
                 }
                 .build(),
@@ -201,7 +171,7 @@ class MMOCoreCompatibility : Compatibility {
                         }
                     }
                     Function { p ->
-                        (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).stats.map.getInstance(args[0]).getFilteredTotal(predicate)
+                        (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).playerStats.map.getInstance(args[0]).getFilteredTotal(predicate)
                     }
                 }
                 .build(),
@@ -213,23 +183,13 @@ class MMOCoreCompatibility : Compatibility {
                     }
                 }
                 .build(),
-            "claims" to HudPlaceholder.builder<Number>()
-                .requiredArgsLength(1)
-                .function { args, _ ->
-                    val i = args[0].toInt()
-                    Function { p ->
-                        val mmo = p.bukkitPlayer.toMMOCore() ?: return@Function 0.0
-                        mmo.getBoundSkill(i)?.getParameter("cooldown", mmo) ?: -1
-                    }
-                }
-                .build(),
             "current_cooldown_slot" to HudPlaceholder.builder<Number>()
                 .requiredArgsLength(1)
                 .function { args, _ ->
                     val i = args[0].toInt()
                     Function { p ->
                         val mmo = p.bukkitPlayer.toMMOCore() ?: return@Function 0.0
-                        mmo.getBoundSkill(i)?.getParameter("cooldown", mmo) ?: -1
+                        mmo.getBoundSkill(i)?.getParameter("cooldown", mmo.level, mmo) ?: -1
                     }
                 }
                 .build(),
@@ -269,7 +229,7 @@ class MMOCoreCompatibility : Compatibility {
                     Function { p ->
                         val mmo = p.bukkitPlayer.toMMOCore() ?: return@Function 0.0
                         (0..8).firstOrNull {
-                            mmo.getBoundSkill(it)?.skill?.handler?.id == skill.handler.id
+                            mmo.getBoundSkill(it)?.registeredSkill?.handler?.id == skill.handler.id
                         } ?: -1
                     }
                 }
@@ -290,8 +250,8 @@ class MMOCoreCompatibility : Compatibility {
                     Function { p ->
                         val bar = p.bukkitPlayer.inventory.heldItemSlot
                         var i = 0
-                        for ((index, entry) in (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).boundSkills.entries.withIndex()) {
-                            if (entry.value.classSkill.skill.handler.id == skill.handler.id) {
+                        for ((index, entry) in (p.bukkitPlayer.toMMOCore() ?: return@Function 0.0).loadedBoundSkills.entries.withIndex()) {
+                            if (entry.value.classSkill.registeredSkill.handler.id == skill.handler.id) {
                                 i = entry.key
                                 if (index >= bar) i++
                                 break
@@ -309,23 +269,13 @@ class MMOCoreCompatibility : Compatibility {
                     (p.bukkitPlayer.toMMOCore() ?: return@Function "<none>").profess.name
                 }
             },
-            "guild_id" to HudPlaceholder.of { _, _ ->
-                Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function "<none>").guild?.id ?: "<none>"
-                }
-            },
-            "guild_name" to HudPlaceholder.of { _, _ ->
-                Function { p ->
-                    (p.bukkitPlayer.toMMOCore() ?: return@Function "<none>").guild?.name ?: "<none>"
-                }
-            },
             "skill_name" to HudPlaceholder.builder<String>()
                 .requiredArgsLength(1)
                 .function { args, _ ->
                     val i = args[0].toInt()
                     Function { p ->
                         val mmo = p.bukkitPlayer.toMMOCore() ?: return@Function "<none>"
-                        mmo.getBoundSkill(i)?.skill?.name ?: "<none>"
+                        mmo.getBoundSkill(i)?.registeredSkill?.displayName ?: "<none>"
                     }
                 }
                 .build(),
@@ -377,8 +327,8 @@ class MMOCoreCompatibility : Compatibility {
                 .function { args, _ ->
                     Function { p ->
                         val mmo = p.bukkitPlayer.toMMOCore() ?: return@Function false
-                        mmo.boundSkills.any {
-                            it.value.classSkill.skill.handler.id == args[0]
+                        mmo.loadedBoundSkills.any {
+                            it.value.classSkill.registeredSkill.handler.id == args[0]
                         }
                     }
                 }
